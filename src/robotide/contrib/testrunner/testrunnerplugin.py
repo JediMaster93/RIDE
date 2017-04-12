@@ -72,6 +72,7 @@ ID_STEP_OVER = wx.NewId()
 ID_SHOW_REPORT = wx.NewId()
 ID_SHOW_LOG = wx.NewId()
 ID_AUTOSAVE = wx.NewId()
+ID_RUNALL = wx.NewId()
 ID_PAUSE_ON_FAILURE = wx.NewId()
 ID_SHOW_MESSAGE_LOG = wx.NewId()
 STYLE_STDERR = 2
@@ -85,6 +86,7 @@ def _RunProfile(name, run_prefix):
 class TestRunnerPlugin(Plugin):
     """A plugin for running tests from within RIDE"""
     defaults = {"auto_save": False,
+                "run_all_confirm": False,
                 "show_message_log": True,
                 "profile": "pybot",
                 "sash_position": 200,
@@ -193,6 +195,10 @@ class TestRunnerPlugin(Plugin):
         '''Called when the user clicks on the "Auto Save" checkbox'''
         self.save_setting("auto_save", evt.IsChecked())
 
+    def OnRunAllConfirmCheckbox(self, evt):
+        '''Called when the user clicks on the "Run all" checkbox'''
+        self.save_setting("run_all_confirm", evt.IsChecked())
+
     def OnShowHideMessageLog(self, evt):
         checked = evt.IsChecked()
         self.save_setting("show_message_log", checked)
@@ -245,6 +251,9 @@ class TestRunnerPlugin(Plugin):
         '''Called when the user clicks the "Run" button'''
         if not self._can_start_running_tests():
             return
+        if self.run_all_confirm  and not self.tests_selected():
+            if not self.ask_user_to_run_anyway():
+                return
         self._initialize_ui_for_running()
         command = self._create_command()
         self._output("command: %s\n" % command)
@@ -294,6 +303,14 @@ class TestRunnerPlugin(Plugin):
         ret = wx.MessageBox('There are unsaved modifications.\n'
                             'Do you want to save all changes and run the tests?',
                             'Unsaved Modifications',
+                            wx.ICON_QUESTION|wx.YES_NO)
+        return ret == wx.YES
+    def tests_selected(self):
+        return len(self._names_to_run) != 0
+    def ask_user_to_run_anyway(self):
+        ret = wx.MessageBox('No tests selected. \n'
+                            'Continue anyway?',
+                            'No tests selected',
                             wx.ICON_QUESTION|wx.YES_NO)
         return ret == wx.YES
 
@@ -529,6 +546,10 @@ class TestRunnerPlugin(Plugin):
         self.savecb.SetValue(self.auto_save)
         toolbar.AddControl(self.savecb)
 
+        self.show_run_all_message_dialog = wx.CheckBox(toolbar, ID_RUNALL, " Run All Confirm  ")
+        self.show_run_all_message_dialog.SetToolTip(wx.ToolTip("Shows a Run All Confirm Dialog before running"))
+        self.show_run_all_message_dialog.SetValue(self.run_all_confirm)
+        toolbar.AddControl(self.show_run_all_message_dialog)
         self.pause_after_failure_cb = wx.CheckBox(toolbar, ID_PAUSE_ON_FAILURE, " Pause on failure  ")
         self.pause_after_failure_cb.SetToolTip(wx.ToolTip("Automatically pause after failing keyword"))
         self.pause_after_failure_cb.SetValue(False)
@@ -553,6 +574,7 @@ class TestRunnerPlugin(Plugin):
         toolbar.Bind(wx.EVT_CHECKBOX, self.OnShowHideMessageLog, self.show_log_messages_checkbox)
         toolbar.Bind(wx.EVT_CHECKBOX, self.OnPauseOnFailureCheckbox, self.pause_after_failure_cb)
         toolbar.Bind(wx.EVT_CHOICE, self.OnProfileSelection, self.choice)
+        toolbar.Bind(wx.EVT_CHECKBOX, self.OnRunAllConfirmCheckbox, self.show_run_all_message_dialog)
 
     def get_current_profile(self):
         return self._test_runner.get_profile(self.choice.GetStringSelection())
